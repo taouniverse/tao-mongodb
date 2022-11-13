@@ -15,15 +15,20 @@
 package mongodb
 
 import (
+	"context"
 	"github.com/stretchr/testify/assert"
 	"github.com/taouniverse/tao"
 	"testing"
+	"time"
 )
 
 func TestTao(t *testing.T) {
-	err := tao.DevelopMode()
+	err := tao.SetConfigPath("./test.yaml")
 	assert.Nil(t, err)
 
-	err = tao.Run(nil, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = tao.Run(ctx, nil)
 	assert.Nil(t, err)
 }

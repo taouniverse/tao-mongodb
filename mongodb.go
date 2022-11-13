@@ -15,10 +15,15 @@
 package mongodb
 
 import (
+	"context"
+	"fmt"
 	"github.com/taouniverse/tao"
+	"time"
+
 	// Load the required dependencies.
 	// An error occurs when there was no package in the root directory.
-	_ "go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 /**
@@ -35,8 +40,21 @@ func init() {
 	}
 }
 
-// TODO setup unit with the global config 'M'
+// Client of mongodb
+var Client *mongo.Client
+
+// setup unit with the global config 'M'
 // execute when init tao universe
-func setup() error {
-	return nil
+func setup() (err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	Client, err = mongo.Connect(ctx,
+		options.Client().
+			ApplyURI(fmt.Sprintf("mongodb://%s:%d", M.Host, M.Port)).
+			SetAuth(options.Credential{
+				Username: M.User,
+				Password: M.Password,
+			}),
+	)
+	return err
 }

@@ -17,18 +17,28 @@ package mongodb
 import (
 	"context"
 	"github.com/taouniverse/tao"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"time"
 )
 
 // ConfigKey for this repo
 const ConfigKey = "mongodb"
 
 // Config implements tao.Config
-// TODO declare the configuration you want & define some default values
+// declare the configuration you want & define some default values
 type Config struct {
+	Host      string   `json:"host"`
+	Port      int      `json:"port"`
+	User      string   `json:"user"`
+	Password  string   `json:"password"`
 	RunAfters []string `json:"run_after,omitempty"`
 }
 
 var defaultMongodb = &Config{
+	Host:      "localhost",
+	Port:      27017,
+	User:      "tao",
+	Password:  "123456qwe",
 	RunAfters: []string{},
 }
 
@@ -39,6 +49,18 @@ func (m *Config) Name() string {
 
 // ValidSelf with some default values
 func (m *Config) ValidSelf() {
+	if m.Host == "" {
+		m.Host = defaultMongodb.Host
+	}
+	if m.Port == 0 {
+		m.Port = defaultMongodb.Port
+	}
+	if m.User == "" {
+		m.User = defaultMongodb.User
+	}
+	if m.Password == "" {
+		m.Password = defaultMongodb.Password
+	}
 	if m.RunAfters == nil {
 		m.RunAfters = defaultMongodb.RunAfters
 	}
@@ -55,9 +77,15 @@ func (m *Config) ToTask() tao.Task {
 				return param, tao.NewError(tao.ContextCanceled, "%s: context has been canceled", ConfigKey)
 			default:
 			}
-			// TODO JOB code run after RunAfters, you can just do nothing here
-			return param, nil
-		})
+			// JOB code run after RunAfters, you can just do nothing here
+			err := Client.Ping(ctx, readpref.Primary())
+			return param, err
+		},
+		tao.SetClose(func() error {
+			ctx, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelFunc()
+			return Client.Disconnect(ctx)
+		}))
 }
 
 // RunAfter defines pre task names
