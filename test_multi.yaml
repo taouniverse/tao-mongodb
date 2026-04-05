@@ -1,0 +1,12 @@
+mongodb:
+  default_instance: master
+  master:
+    host: localhost
+    port: 27017
+    user: tao
+    password: 123456qwe
+  replica:
+    host: localhost
+    port: 27017
+    user: tao
+    password: 123456qwe

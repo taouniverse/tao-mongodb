@@ -1,4 +1,4 @@
-// Copyright 2022 huija
+// Copyright 2021-2026 huija
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,30 +16,34 @@ package mongodb
 
 import (
 	"context"
+	"time"
+
 	"github.com/taouniverse/tao"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
-	"time"
 )
 
 // ConfigKey for this repo
 const ConfigKey = "mongodb"
 
-// Config implements tao.Config
-// declare the configuration you want & define some default values
-type Config struct {
-	Host      string   `json:"host"`
-	Port      int      `json:"port"`
-	User      string   `json:"user"`
-	Password  string   `json:"password"`
-	RunAfters []string `json:"run_after,omitempty"`
+// InstanceConfig 单实例配置
+type InstanceConfig struct {
+	Host     string `json:"host" yaml:"host"`
+	Port     int    `json:"port" yaml:"port"`
+	User     string `json:"user" yaml:"user"`
+	Password string `json:"password" yaml:"password"`
 }
 
-var defaultMongodb = &Config{
-	Host:      "localhost",
-	Port:      27017,
-	User:      "tao",
-	Password:  "123456qwe",
-	RunAfters: []string{},
+// Config 总配置，实现 tao.MultiConfig 接口
+type Config struct {
+	tao.BaseMultiConfig[InstanceConfig]
+	RunAfters []string `json:"run_after,omitempty" yaml:"run_after,omitempty"`
+}
+
+var defaultInstance = &InstanceConfig{
+	Host:     "localhost",
+	Port:     27017,
+	User:     "tao",
+	Password: "123456qwe",
 }
 
 // Name of Config
@@ -49,20 +53,23 @@ func (m *Config) Name() string {
 
 // ValidSelf with some default values
 func (m *Config) ValidSelf() {
-	if m.Host == "" {
-		m.Host = defaultMongodb.Host
-	}
-	if m.Port == 0 {
-		m.Port = defaultMongodb.Port
-	}
-	if m.User == "" {
-		m.User = defaultMongodb.User
-	}
-	if m.Password == "" {
-		m.Password = defaultMongodb.Password
+	for name, instance := range m.Instances {
+		if instance.Host == "" {
+			instance.Host = defaultInstance.Host
+		}
+		if instance.Port == 0 {
+			instance.Port = defaultInstance.Port
+		}
+		if instance.User == "" {
+			instance.User = defaultInstance.User
+		}
+		if instance.Password == "" {
+			instance.Password = defaultInstance.Password
+		}
+		m.Instances[name] = instance
 	}
 	if m.RunAfters == nil {
-		m.RunAfters = defaultMongodb.RunAfters
+		m.RunAfters = []string{}
 	}
 }
 
@@ -71,20 +78,27 @@ func (m *Config) ToTask() tao.Task {
 	return tao.NewTask(
 		ConfigKey,
 		func(ctx context.Context, param tao.Parameter) (tao.Parameter, error) {
-			// non-block check
 			select {
 			case <-ctx.Done():
 				return param, tao.NewError(tao.ContextCanceled, "%s: context has been canceled", ConfigKey)
 			default:
 			}
-			// JOB code run after RunAfters, you can just do nothing here
-			err := Client.Ping(ctx, readpref.Primary())
-			return param, err
+			for name := range m.Instances {
+				client, err := Factory.Get(name)
+				if err != nil {
+					return param, err
+				}
+				err = client.Ping(ctx, readpref.Primary())
+				if err != nil {
+					return param, err
+				}
+			}
+			return param, nil
 		},
 		tao.SetClose(func() error {
-			ctx, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
+			_, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancelFunc()
-			return Client.Disconnect(ctx)
+			return Factory.CloseAll()
 		}))
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2022 huija
+// Copyright 2021-2026 huija
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,11 +17,10 @@ package mongodb
 import (
 	"context"
 	"fmt"
-	"github.com/taouniverse/tao"
 	"time"
 
-	// Load the required dependencies.
-	// An error occurs when there was no package in the root directory.
+	"github.com/taouniverse/tao"
+
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -30,31 +29,52 @@ import (
 import _ "github.com/taouniverse/tao-mongodb"
 */
 
-// M config of mongodb
-var M = new(Config)
+// M is the global config instance for tao-mongodb
+var M = &Config{}
+
+// Factory is the global factory instance for managing mongo.Client
+var Factory *tao.BaseFactory[*mongo.Client]
 
 func init() {
-	err := tao.Register(ConfigKey, M, setup)
+	var err error
+	Factory, err = tao.Register(ConfigKey, M, NewMongoDB)
 	if err != nil {
 		panic(err.Error())
 	}
 }
 
-// Client of mongodb
-var Client *mongo.Client
-
-// setup unit with the global config 'M'
-// execute when init tao universe
-func setup() (err error) {
+// NewMongoDB creates a new MongoDB client for factory pattern
+func NewMongoDB(name string, config InstanceConfig) (*mongo.Client, func() error, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	Client, err = mongo.Connect(ctx,
+
+	client, err := mongo.Connect(ctx,
 		options.Client().
-			ApplyURI(fmt.Sprintf("mongodb://%s:%d", M.Host, M.Port)).
+			ApplyURI(fmt.Sprintf("mongodb://%s:%d", config.Host, config.Port)).
 			SetAuth(options.Credential{
-				Username: M.User,
-				Password: M.Password,
+				Username: config.User,
+				Password: config.Password,
 			}),
 	)
-	return err
+	if err != nil {
+		return nil, nil, tao.NewErrorWrapped("mongodb: fail to create mongo client", err)
+	}
+
+	closer := func() error {
+		ctx, cancelFunc := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelFunc()
+		return client.Disconnect(ctx)
+	}
+
+	return client, closer, nil
+}
+
+// Client returns the default mongo client instance
+func Client() (*mongo.Client, error) {
+	return Factory.Get(M.GetDefaultInstanceName())
+}
+
+// GetClient returns the mongo client instance by name
+func GetClient(name string) (*mongo.Client, error) {
+	return Factory.Get(name)
 }
