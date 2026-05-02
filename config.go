@@ -53,7 +53,8 @@ func (m *Config) Name() string {
 
 // ValidSelf with some default values
 func (m *Config) ValidSelf() {
-	for name, instance := range m.Instances {
+	for i := range m.Instances {
+		instance := &m.Instances[i].Cfg
 		if instance.Host == "" {
 			instance.Host = defaultInstance.Host
 		}
@@ -66,7 +67,6 @@ func (m *Config) ValidSelf() {
 		if instance.Password == "" {
 			instance.Password = defaultInstance.Password
 		}
-		m.Instances[name] = instance
 	}
 	if m.RunAfters == nil {
 		m.RunAfters = []string{}
@@ -83,7 +83,8 @@ func (m *Config) ToTask() tao.Task {
 				return param, tao.NewError(tao.ContextCanceled, "%s: context has been canceled", ConfigKey)
 			default:
 			}
-			for name := range m.Instances {
+			for _, inst := range m.Instances {
+				name := inst.Name
 				client, err := Factory.Get(name)
 				if err != nil {
 					return param, err
